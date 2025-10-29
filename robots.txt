@@ -1,0 +1,3 @@
+User-agent: *
+Disallow:
+Sitemap: https://id-fix.github.io/Blog/sitemap.xml
