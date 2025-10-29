@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
     <title>IDFIX.dk - Fritids og Interesser.</title>
-    <link href="https://id-fix.github.io/Blog/feed.xml" rel="self" />
-    <link href="https://id-fix.github.io/Blog" />
+    <link href="https://blog.idfix.dk/feed.xml" rel="self" />
+    <link href="https://blog.idfix.dk" />
     <updated>2025-10-29T06:31:50-07:00</updated>
     <author>
         <name>Grantland</name>
     </author>
-    <id>https://id-fix.github.io/Blog</id>
+    <id>https://blog.idfix.dk</id>
 
     <entry>
         <title>IT Blog</title>
         <author>
             <name>Grantland</name>
         </author>
-        <link href="https://id-fix.github.io/Blog/it-blog-1.html"/>
-        <id>https://id-fix.github.io/Blog/it-blog-1.html</id>
+        <link href="https://blog.idfix.dk/it-blog-1.html"/>
+        <id>https://blog.idfix.dk/it-blog-1.html</id>
 
         <updated>2025-10-29T06:23:23-07:00</updated>
             <summary>

@@ -2,16 +2,16 @@
     "version": "https://jsonfeed.org/version/1",
     "title": "IDFIX.dk - Fritids og Interesser.",
     "description": "",
-    "home_page_url": "https://id-fix.github.io/Blog",
-    "feed_url": "https://id-fix.github.io/Blog/feed.json",
+    "home_page_url": "https://blog.idfix.dk",
+    "feed_url": "https://blog.idfix.dk/feed.json",
     "user_comment": "",
     "author": {
         "name": "Grantland"
     },
     "items": [
         {
-            "id": "https://id-fix.github.io/Blog/it-blog-1.html",
-            "url": "https://id-fix.github.io/Blog/it-blog-1.html",
+            "id": "https://blog.idfix.dk/it-blog-1.html",
+            "url": "https://blog.idfix.dk/it-blog-1.html",
             "title": "IT Blog",
             "summary": "dette er først IT Blog",
             "content_html": "\n  <p>\n    dette er først IT Blog\n  </p>",
