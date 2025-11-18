@@ -1,0 +1,153 @@
+<!DOCTYPE html><html lang="da"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Powershell - IDFIX.dk - Fritids og Interesser.</title><meta name="description" content="&lt;# .SYNOPSIS Giv en AD-gruppe Modify (NTFS) på alle undermapper – også der hvor nedarvning er stoppet – uden at ændre eksisterende rettigheder. .EXAMPLE .\Grant-ModifyToTree.ps1&hellip;"><meta name="generator" content="Publii Open-Source CMS for Static Site"><link rel="canonical" href="https://blog.idfix.dk/powershell-2.html"><link rel="alternate" type="application/atom+xml" href="https://blog.idfix.dk/feed.xml" title="IDFIX.dk - Fritids og Interesser. - RSS"><link rel="alternate" type="application/json" href="https://blog.idfix.dk/feed.json" title="IDFIX.dk - Fritids og Interesser. - JSON"><meta property="og:title" content="Powershell"><meta property="og:site_name" content="IDFIX.dk - Fritids og Interesser."><meta property="og:description" content="&lt;# .SYNOPSIS Giv en AD-gruppe Modify (NTFS) på alle undermapper – også der hvor nedarvning er stoppet – uden at ændre eksisterende rettigheder. .EXAMPLE .\Grant-ModifyToTree.ps1&hellip;"><meta property="og:url" content="https://blog.idfix.dk/powershell-2.html"><meta property="og:type" content="article"><link rel="preload" href="https://blog.idfix.dk/assets/dynamic/fonts/jetbrainsmono/jetbrainsmono.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="https://blog.idfix.dk/assets/dynamic/fonts/jetbrainsmono/jetbrainsmono-italic.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="https://blog.idfix.dk/assets/css/style.css?v=d0452dc359017e29f30d594f82762bfa"><script type="application/ld+json">{"@context":"http://schema.org","@type":"Article","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.idfix.dk/powershell-2.html"},"headline":"Powershell","datePublished":"2025-11-14T04:26-08:00","dateModified":"2025-11-14T04:39-08:00","description":"&lt;# .SYNOPSIS Giv en AD-gruppe Modify (NTFS) på alle undermapper – også der hvor nedarvning er stoppet – uden at ændre eksisterende rettigheder. .EXAMPLE .\\Grant-ModifyToTree.ps1&hellip;","author":{"@type":"Person","name":"Grantland","url":"https://blog.idfix.dk/authors/grantland/"},"publisher":{"@type":"Organization","name":"Grantland"}}</script><noscript><style>img[loading] {
+                    opacity: 1;
+                }</style></noscript></head><body class="page-template"><div class="container container--center"><header class="header"><div class="header__logo"><a class="logo" href="https://blog.idfix.dk/">IDFIX.dk - Fritids og Interesser.</a></div><nav class="navbar js-navbar"><button class="navbar__toggle js-toggle" aria-label="Menu" aria-haspopup="true" aria-expanded="false"><span class="navbar__toggle-box"><span class="navbar__toggle-inner">Menu</span></span></button><ul class="navbar__menu"><li><a href="https://blog.idfix.dk/" title="Forside" target="_self">Forside</a></li><li><a href="https://blog.idfix.dk/fystfisker.html" target="_self">Lystfisker Blog</a></li><li class="active"><a href="https://blog.idfix.dk/powershell-2.html" title="Powershell" target="_self">Powershell</a></li></ul></nav></header><main class="content page"><article class="post"><header><h1 class="post__title">Powershell</h1></header><div class="post__entry"><pre class="line-numbers language-powershell"><code>&lt;# 
+.SYNOPSIS
+  Giv en AD-gruppe Modify (NTFS) på alle undermapper – også der hvor nedarvning er stoppet – uden at ændre eksisterende rettigheder.
+
+.EXAMPLE
+  .\Grant-ModifyToTree.ps1 -RootPath "\\FS01\Afdeling" -Group "CONTOSO\Support-Desk" -IncludeRoot -Verbose -WhatIf
+
+.EXAMPLE
+  .\Grant-ModifyToTree.ps1 -RootPath "D:\Data\Projekter" -Group "CONTOSO\Support-Desk" -ShareName "Projekter" -IncludeRoot -Verbose
+#&gt;
+
+[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$RootPath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$Group,            # Brug format DOMAIN\Group
+
+    [Parameter()]
+    [string]$ShareName,        # Valgfrit: SMB share-navn hvis share-permission også skal gives
+
+    [switch]$IncludeRoot,      # Medtag også selve roden
+    [switch]$Quiet             # Mindre output
+)
+
+begin {
+    # Hjælpere
+    function Test-GroupHasSufficientRights {
+        param(
+            [System.Security.AccessControl.DirectorySecurity]$Acl,
+            [System.Security.Principal.NTAccount]$Nt
+        )
+        # Find eksisterende Allow-ACE for samme identitet med Modify eller FullControl
+        $found = $false
+        foreach ($ace in $Acl.Access) {
+            if ($ace.IdentityReference -eq $Nt -and $ace.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow) {
+                $rights = $ace.FileSystemRights
+                if ( ($rights -band [System.Security.AccessControl.FileSystemRights]::FullControl) -or
+                     ($rights -band [System.Security.AccessControl.FileSystemRights]::Modify) ) {
+                    $found = $true; break
+                }
+            }
+        }
+        return $found
+    }
+
+    try {
+        # Forsøg at resolvere gruppen til NTAccount (giver bedre konsistens)
+        $id = New-Object System.Security.Principal.NTAccount($Group)
+        # Force SID-translation for at fange evt. stavefejl tidligt
+        [void]$id.Translate([System.Security.Principal.SecurityIdentifier])
+    } catch {
+        throw "Gruppen '$Group' kunne ikke findes. Tjek domæne- og gruppenavn."
+    }
+
+    $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor `
+                   [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+    $propagation = [System.Security.AccessControl.PropagationFlags]::None
+
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $id,
+        [System.Security.AccessControl.FileSystemRights]::Modify,
+        $inheritance,
+        $propagation,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+
+    if (-not (Test-Path -LiteralPath $RootPath)) {
+        throw "Stien '$RootPath' findes ikke."
+    }
+
+    if (-not $Quiet) {
+        Write-Host "Starter tildeling af NTFS Modify til '$Group' under '$RootPath'..." -ForegroundColor Cyan
+        if ($PSBoundParameters.ContainsKey('ShareName')) {
+            Write-Host "Share-permission (Change) vil også blive forsøgt på share '$ShareName'." -ForegroundColor Cyan
+        }
+    }
+}
+
+process {
+    $targets = @()
+
+    if ($IncludeRoot) { $targets += (Get-Item -LiteralPath $RootPath -ErrorAction Stop) }
+
+    # Hent ALLE undermapper (ignorerer reparse points/junctions for at undgå loops)
+    $subdirs = Get-ChildItem -LiteralPath $RootPath -Directory -Recurse -Force -ErrorAction SilentlyContinue |
+               Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) }
+
+    $targets += $subdirs
+
+    $count = 0
+    foreach ($dir in $targets) {
+        $count++
+        try {
+            $acl = Get-Acl -LiteralPath $dir.FullName
+
+            if (Test-GroupHasSufficientRights -Acl $acl -Nt $id) {
+                if (-not $Quiet) { Write-Verbose ("[{0}] SKIP  {1}" -f $count, $dir.FullName) }
+                continue
+            }
+
+            if ($PSCmdlet.ShouldProcess($dir.FullName, "Add NTFS Modify for $Group")) {
+                $acl.AddAccessRule($rule) | Out-Null
+                Set-Acl -LiteralPath $dir.FullName -AclObject $acl
+                if (-not $Quiet) { Write-Host ("[{0}] ADD   {1}" -f $count, $dir.FullName) }
+            }
+        }
+        catch {
+            Write-Warning ("[{0}] FEJL  {1} -&gt; {2}" -f $count, $dir.FullName, $_.Exception.Message)
+            continue
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('ShareName')) {
+        try {
+            # Tilføj SMB-share rettighed "Change" (modificér), uden at røre eksisterende
+            # Kræver Windows 8/2012+ (SmbShare-modulet)
+            if ($PSCmdlet.ShouldProcess($ShareName, "Grant SMB Share 'Change' to $Group")) {
+                # Tjek om der allerede er en ACE
+                $existing = Get-SmbShareAccess -Name $ShareName -ErrorAction Stop |
+                            Where-Object { $_.Name -eq $ShareName -and $_.AccountName -ieq $Group -and $_.AccessControlType -eq "Allow" }
+
+                if (-not $existing) {
+                    Grant-SmbShareAccess -Name $ShareName -AccountName $Group -AccessRight Change -Force -ErrorAction Stop | Out-Null
+                    if (-not $Quiet) { Write-Host "SMB: ADD  '$Group' -&gt; $ShareName (Change)" }
+                } elseif (-not $Quiet) {
+                    Write-Verbose "SMB: SKIP '$Group' har allerede adgang på $ShareName."
+                }
+            }
+        }
+        catch {
+            Write-Warning "SMB: Kunne ikke opdatere share '$ShareName' -&gt; $($_.Exception.Message)"
+        }
+    }
+
+    if (-not $Quiet) { Write-Host "Færdig." -ForegroundColor Green }
+}
+                        
+</code></pre></div></article></main><footer class="footer"><div class="footer__inner"><div class="footer__copyright"><p>© 2024 Powered by Publii CMS :: Administrated by Lennart Grantland</p></div></div></footer></div><script defer="defer" src="https://blog.idfix.dk/assets/js/scripts.min.js?v=c2232aa7558e9517946129d2a1b8c770"></script><script>window.publiiThemeMenuConfig={mobileMenuMode:'sidebar',animationSpeed:300,submenuWidth: 'auto',doubleClickTime:500,mobileMenuExpandableSubmenus:true,relatedContainerForOverlayMenuSelector:'.top'};</script><script>var images = document.querySelectorAll('img[loading]');
+        for (var i = 0; i < images.length; i++) {
+            if (images[i].complete) {
+                images[i].classList.add('is-loaded');
+            } else {
+                images[i].addEventListener('load', function () {
+                    this.classList.add('is-loaded');
+                }, false);
+            }
+        }</script></body></html>
